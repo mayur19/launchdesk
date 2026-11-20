@@ -1,0 +1,25 @@
+name: Feature / backlog ticket
+description: A unit of planned work from the roadmap
+labels: [enhancement]
+body:
+  - type: input
+    id: ticket
+    attributes:
+      label: Ticket ID
+      placeholder: XX-000
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What needs to be built. Reference PRD requirement IDs (FR-xx) and ADRs.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Testable statements; each should map to an automated test.
+    validations:
+      required: true

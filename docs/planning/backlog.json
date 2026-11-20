@@ -1,0 +1,1062 @@
+{
+  "project": "launchdesk",
+  "ticketPrefix": "LD",
+  "milestones": [
+    {
+      "id": "M0",
+      "title": "M0: Foundation",
+      "description": "Monorepo, tooling, authentication, tenancy, audit, health checks, launcher and engineering documentation."
+    },
+    {
+      "id": "M1",
+      "title": "M1: Customers and templates",
+      "description": "Customer accounts and contacts, provider/customer memberships, reusable implementation templates and the dependency graph domain."
+    },
+    {
+      "id": "M2",
+      "title": "M2: Projects and tasks",
+      "description": "Template snapshot instantiation, project lifecycle, tasks, subtasks, dependencies, comments and schedule rebaseline."
+    },
+    {
+      "id": "M3",
+      "title": "M3: Milestones and evidence",
+      "description": "Milestone submission gates, immutable customer review rounds, local file storage and deliverable versioning."
+    },
+    {
+      "id": "M4",
+      "title": "M4: Risks, health and launch",
+      "description": "Risk and blocker register, rule-based project health from SQL, progress, portfolio dashboard and launch gates."
+    },
+    {
+      "id": "M5",
+      "title": "M5: Customer portal and communications",
+      "description": "Customer portal with query-layer visibility filtering, activity timeline, in-app notifications and work queue."
+    },
+    {
+      "id": "M6",
+      "title": "M6: Reporting and hardening",
+      "description": "Portfolio reporting, CSV export, audit history, demo dataset, acceptance suite, accessibility and deployment."
+    }
+  ],
+  "tickets": [
+    {
+      "id": "LD-001",
+      "title": "Set up monorepo, tooling and CI pipeline",
+      "milestone": "M0",
+      "prdRefs": ["§2"],
+      "adrRefs": ["ADR-0002", "ADR-0010"],
+      "estimateHours": 4,
+      "status": "done",
+      "dependsOn": [],
+      "labels": ["devops"],
+      "description": "npm workspaces for api, web and shared packages with strict TypeScript, ESLint, Prettier, Vitest and a GitHub Actions pipeline with a PostgreSQL service and secret scanning.",
+      "acceptanceCriteria": [
+        "`./run.sh check` runs lint, format, typecheck, unit and integration tests",
+        "CI runs the same gates on every pull request"
+      ]
+    },
+    {
+      "id": "LD-002",
+      "title": "Implement forward-only migration runner and foundation schema",
+      "milestone": "M0",
+      "prdRefs": ["§6", "FR-10"],
+      "adrRefs": ["ADR-0004", "ADR-0003"],
+      "estimateHours": 3,
+      "status": "done",
+      "dependsOn": ["LD-001"],
+      "labels": ["database"],
+      "description": "Lexically ordered SQL migrations applied in transactions with checksums, plus the organizations, users, sessions and audit_events tables.",
+      "acceptanceCriteria": [
+        "Re-running migrations is a no-op",
+        "Editing an applied migration aborts startup"
+      ]
+    },
+    {
+      "id": "LD-003",
+      "title": "Implement session authentication with scrypt, CSRF and rate limiting",
+      "milestone": "M0",
+      "prdRefs": ["§2", "§3"],
+      "adrRefs": ["ADR-0005"],
+      "estimateHours": 5,
+      "status": "done",
+      "dependsOn": ["LD-002"],
+      "labels": ["security", "backend"],
+      "description": "Local email/password login with scrypt hashes, opaque server-side sessions in httpOnly SameSite cookies, origin plus token CSRF defence and login rate limiting.",
+      "acceptanceCriteria": [
+        "Wrong passwords return a generic 401",
+        "Unsafe requests without a CSRF token return 403"
+      ]
+    },
+    {
+      "id": "LD-004",
+      "title": "Add error envelope, request ids, health checks and structured logging",
+      "milestone": "M0",
+      "prdRefs": ["§7"],
+      "adrRefs": ["ADR-0006"],
+      "estimateHours": 3,
+      "status": "done",
+      "dependsOn": ["LD-001"],
+      "labels": ["backend"],
+      "description": "Consistent success/error envelope, AppError codes, request correlation ids, pino logging with redaction, liveness and readiness probes.",
+      "acceptanceCriteria": [
+        "Unknown routes return a 404 envelope",
+        "Readiness returns 503 when PostgreSQL is unreachable"
+      ]
+    },
+    {
+      "id": "LD-005",
+      "title": "Provide run.sh launcher and development environment bootstrap",
+      "milestone": "M0",
+      "prdRefs": ["§2"],
+      "adrRefs": ["ADR-0009"],
+      "estimateHours": 2,
+      "status": "done",
+      "dependsOn": ["LD-002"],
+      "labels": ["devops"],
+      "description": "Single bash entry point that installs dependencies, creates .env with a random session secret, creates the database, migrates, seeds and launches API and web.",
+      "acceptanceCriteria": [
+        "`./run.sh` takes a fresh clone to a running app",
+        "`./run.sh help` lists every subcommand"
+      ]
+    },
+    {
+      "id": "LD-006",
+      "title": "Define LaunchDesk actor model and role constraint migration",
+      "milestone": "M0",
+      "prdRefs": ["§3", "FR-01"],
+      "adrRefs": ["ADR-0007", "ADR-0013"],
+      "estimateHours": 2,
+      "status": "done",
+      "dependsOn": ["LD-002"],
+      "labels": ["security", "database"],
+      "description": "Replace placeholder roles with the five PRD actors, add a CHECK constraint on users.role and bind customer-side users to exactly one customer account.",
+      "acceptanceCriteria": [
+        "Inserting an unknown role fails at the database",
+        "Customer roles without a customer account are rejected"
+      ]
+    },
+    {
+      "id": "LD-007",
+      "title": "Write architecture documentation, ADRs and engineering backlog",
+      "milestone": "M0",
+      "prdRefs": ["§10", "§11"],
+      "adrRefs": ["ADR-0001"],
+      "estimateHours": 4,
+      "status": "done",
+      "dependsOn": [],
+      "labels": ["docs"],
+      "description": "Architecture overview, quality attributes, system design, data model, OpenAPI contract, threat model, test strategy, runbook, roadmap, backlog and ADRs 0001-0017.",
+      "acceptanceCriteria": [
+        "Every PRD endpoint appears in openapi.yaml with x-status and x-ticket",
+        "backlog.json matches backlog.md"
+      ]
+    },
+    {
+      "id": "LD-008",
+      "title": "Customer accounts API: list, create and get (tenant-scoped)",
+      "milestone": "M1",
+      "prdRefs": ["FR-01"],
+      "adrRefs": ["ADR-0003", "ADR-0006", "ADR-0007", "ADR-0008"],
+      "estimateHours": 4,
+      "status": "done",
+      "dependsOn": ["LD-006"],
+      "labels": ["backend", "database", "testing"],
+      "description": "Vertical slice for customer accounts with shared zod schemas, repository, service and routes. Reads are limited to provider roles, creation to provider admins, and creation is audited in the same transaction.",
+      "acceptanceCriteria": [
+        "Org B receives 404 for an Org A customer id",
+        "Customer-portal users receive 403 on list",
+        "Duplicate names in one org return 409",
+        "customer.created audit row commits with the insert"
+      ]
+    },
+    {
+      "id": "LD-009",
+      "title": "Customer accounts screen with list and create form",
+      "milestone": "M1",
+      "prdRefs": ["FR-01", "§4.16"],
+      "adrRefs": ["ADR-0007"],
+      "estimateHours": 3,
+      "status": "done",
+      "dependsOn": ["LD-008"],
+      "labels": ["frontend", "ux"],
+      "description": "Paginated customer list with status badges and an admin-only create form with inline validation errors.",
+      "acceptanceCriteria": [
+        "List renders seeded customers",
+        "Create form is hidden for non-admin roles"
+      ]
+    },
+    {
+      "id": "LD-010",
+      "title": "Seed development tenants, demo users and customer accounts",
+      "milestone": "M1",
+      "prdRefs": ["§8", "FR-01"],
+      "adrRefs": ["ADR-0009"],
+      "estimateHours": 2,
+      "status": "done",
+      "dependsOn": ["LD-006"],
+      "labels": ["database"],
+      "description": "Development-only seed for Northstar Cloud and a second provider organization with one demo login per role and a few customer accounts per tenant.",
+      "acceptanceCriteria": ["Seed is idempotent", "Seed refuses to run with NODE_ENV=production"]
+    },
+    {
+      "id": "LD-011",
+      "title": "Customer account update and soft archive",
+      "milestone": "M1",
+      "prdRefs": ["FR-01"],
+      "adrRefs": ["ADR-0008"],
+      "estimateHours": 3,
+      "status": "pending",
+      "dependsOn": ["LD-008"],
+      "labels": ["backend", "frontend"],
+      "description": "PATCH customer account details with optimistic locking and an archive/unarchive action. Archived customers cannot receive new projects but keep history.",
+      "acceptanceCriteria": [
+        "Archived customer is rejected by project creation with 422",
+        "Archive and unarchive write audit events"
+      ]
+    },
+    {
+      "id": "LD-012",
+      "title": "Provider and customer membership model for multi-entity users",
+      "milestone": "M1",
+      "prdRefs": ["FR-01", "§3", "§6"],
+      "adrRefs": ["ADR-0013"],
+      "estimateHours": 5,
+      "status": "pending",
+      "dependsOn": ["LD-006"],
+      "labels": ["backend", "database", "security"],
+      "description": "Introduce provider_memberships and customer_memberships so one identity can belong to several providers or customers, with an active-context switch in the session.",
+      "acceptanceCriteria": [
+        "A user with two memberships can switch context",
+        "Session role always reflects the active membership"
+      ]
+    },
+    {
+      "id": "LD-013",
+      "title": "Customer contacts API and screen",
+      "milestone": "M1",
+      "prdRefs": ["FR-01"],
+      "adrRefs": ["ADR-0013"],
+      "estimateHours": 4,
+      "status": "pending",
+      "dependsOn": ["LD-008", "LD-012"],
+      "labels": ["backend", "frontend"],
+      "description": "List and add customer contacts under /customers/:id/contacts with local-only demo credentials and no email invitations.",
+      "acceptanceCriteria": [
+        "Contacts are scoped to provider org and customer",
+        "No outbound email is attempted"
+      ]
+    },
+    {
+      "id": "LD-014",
+      "title": "Template schema migration",
+      "milestone": "M1",
+      "prdRefs": ["FR-02", "§6"],
+      "adrRefs": ["ADR-0004", "ADR-0015"],
+      "estimateHours": 3,
+      "status": "pending",
+      "dependsOn": ["LD-002"],
+      "labels": ["database"],
+      "description": "Tables for implementation_templates, template_phases, template_tasks, template_task_dependencies and template_milestones with tenant keys and FKs.",
+      "acceptanceCriteria": [
+        "Cross-tenant FK references are impossible",
+        "Indexes exist on (provider_org_id, template_id)"
+      ]
+    },
+    {
+      "id": "LD-015",
+      "title": "Template CRUD and duplicate API",
+      "milestone": "M1",
+      "prdRefs": ["FR-02"],
+      "adrRefs": ["ADR-0015"],
+      "estimateHours": 5,
+      "status": "pending",
+      "dependsOn": ["LD-014"],
+      "labels": ["backend"],
+      "description": "Create, read, update, archive and duplicate templates including phases, tasks, owner side, offsets, evidence rules and milestones.",
+      "acceptanceCriteria": [
+        "Duplicate produces an independent copy",
+        "Only provider admins and managers can edit templates"
+      ]
+    },
+    {
+      "id": "LD-016",
+      "title": "Template validation endpoint with acyclic dependency check",
+      "milestone": "M1",
+      "prdRefs": ["FR-02"],
+      "adrRefs": ["ADR-0014"],
+      "estimateHours": 2,
+      "status": "pending",
+      "dependsOn": ["LD-015", "LD-021"],
+      "labels": ["backend"],
+      "description": "POST /templates/:id/validate reuses the dependency graph domain to reject cycles and dangling references before saving.",
+      "acceptanceCriteria": [
+        "Cyclic template returns 422 with the cycle path",
+        "Valid template returns a topological order"
+      ]
+    },
+    {
+      "id": "LD-017",
+      "title": "Template library and builder screens",
+      "milestone": "M1",
+      "prdRefs": ["FR-02", "§4.15"],
+      "adrRefs": ["ADR-0015"],
+      "estimateHours": 6,
+      "status": "pending",
+      "dependsOn": ["LD-015"],
+      "labels": ["frontend", "ux"],
+      "description": "Template list plus an editable builder for phases, tasks, dependencies and milestones with validation feedback.",
+      "acceptanceCriteria": [
+        "Builder blocks save on validation errors",
+        "Keyboard-accessible dependency picker"
+      ]
+    },
+    {
+      "id": "LD-018",
+      "title": "Seed implementation templates",
+      "milestone": "M1",
+      "prdRefs": ["FR-02", "§8"],
+      "adrRefs": [],
+      "estimateHours": 2,
+      "status": "pending",
+      "dependsOn": ["LD-015"],
+      "labels": ["database"],
+      "description": "Seed SaaS Account Setup, Data Migration + Launch and Security Review + Go-Live templates.",
+      "acceptanceCriteria": [
+        "Three templates exist after seed",
+        "Each template validates as acyclic"
+      ]
+    },
+    {
+      "id": "LD-019",
+      "title": "Shared permission matrix for object-level checks",
+      "milestone": "M1",
+      "prdRefs": ["§3"],
+      "adrRefs": ["ADR-0007", "ADR-0013"],
+      "estimateHours": 3,
+      "status": "pending",
+      "dependsOn": ["LD-006"],
+      "labels": ["security", "backend"],
+      "description": "Central capability map (role x action) plus helpers for project membership and visibility checks used by every service.",
+      "acceptanceCriteria": [
+        "Unit tests cover every role/action pair",
+        "Services call the matrix instead of inline role lists"
+      ]
+    },
+    {
+      "id": "LD-020",
+      "title": "Rule-based project health calculator (pure domain)",
+      "milestone": "M1",
+      "prdRefs": ["FR-09", "L-11", "L-12"],
+      "adrRefs": ["ADR-0016"],
+      "estimateHours": 3,
+      "status": "done",
+      "dependsOn": ["LD-006"],
+      "labels": ["backend", "testing"],
+      "description": "Deterministic evaluation of COMPLETED, AT_RISK, WATCH and ON_TRACK at an explicit now, returning every triggered reason with machine-readable codes.",
+      "acceptanceCriteria": [
+        "Each PRD rule has unit tests including the 20 percent boundary",
+        "Same input always yields the same status and reasons"
+      ]
+    },
+    {
+      "id": "LD-021",
+      "title": "Task dependency graph domain: cycle detection and topological order",
+      "milestone": "M1",
+      "prdRefs": ["FR-04", "FR-02", "L-04", "L-05"],
+      "adrRefs": ["ADR-0014"],
+      "estimateHours": 4,
+      "status": "done",
+      "dependsOn": ["LD-006"],
+      "labels": ["backend", "testing"],
+      "description": "Immutable graph with addDependency that rejects self, duplicate, unknown, cross-project and cyclic edges (returning the cycle path), Kahn topological ordering and derived ready/blocked state.",
+      "acceptanceCriteria": [
+        "Cycle rejection names the full cycle path",
+        "Original graph is never mutated",
+        "100 percent branch coverage"
+      ]
+    },
+    {
+      "id": "LD-022",
+      "title": "Project, phase, task and dependency schema migration",
+      "milestone": "M2",
+      "prdRefs": ["FR-03", "FR-04", "§6"],
+      "adrRefs": ["ADR-0004", "ADR-0003"],
+      "estimateHours": 3,
+      "status": "pending",
+      "dependsOn": ["LD-014"],
+      "labels": ["database"],
+      "description": "Tables for projects, project_memberships, project_phases, project_tasks, task_dependencies and task_checklist_items with version columns and composite tenant FKs.",
+      "acceptanceCriteria": [
+        "A task cannot reference a project from another organization",
+        "Indexes on (provider_org_id, project_id) and due dates"
+      ]
+    },
+    {
+      "id": "LD-023",
+      "title": "Template snapshot instantiation on project creation",
+      "milestone": "M2",
+      "prdRefs": ["FR-02", "FR-03", "L-02", "L-03"],
+      "adrRefs": ["ADR-0015"],
+      "estimateHours": 5,
+      "status": "pending",
+      "dependsOn": ["LD-015", "LD-022"],
+      "labels": ["backend"],
+      "description": "POST /projects copies phases, tasks, dependencies and milestones from the template into project-owned rows with due dates from kickoff offsets.",
+      "acceptanceCriteria": [
+        "Editing the template afterwards leaves the project unchanged",
+        "Creation and audit commit in one transaction"
+      ]
+    },
+    {
+      "id": "LD-024",
+      "title": "Projects API: list and get with filters and optimistic locking",
+      "milestone": "M2",
+      "prdRefs": ["FR-03", "FR-09", "L-16"],
+      "adrRefs": ["ADR-0003", "ADR-0006"],
+      "estimateHours": 4,
+      "status": "pending",
+      "dependsOn": ["LD-022"],
+      "labels": ["backend"],
+      "description": "Paginated project list filtered by owner, customer, health, status and month; get by id; PATCH with version check returning 409 on stale writes.",
+      "acceptanceCriteria": ["Org B receives 404 for Org A project", "Stale version returns 409"]
+    },
+    {
+      "id": "LD-025",
+      "title": "New-project wizard with schedule preview",
+      "milestone": "M2",
+      "prdRefs": ["FR-03", "§4.3"],
+      "adrRefs": ["ADR-0015"],
+      "estimateHours": 5,
+      "status": "pending",
+      "dependsOn": ["LD-023"],
+      "labels": ["frontend", "ux"],
+      "description": "Wizard to select customer, template, dates and owner, previewing generated tasks, milestones, responsible side and due dates.",
+      "acceptanceCriteria": [
+        "Preview matches persisted result",
+        "Archived customers are not selectable"
+      ]
+    },
+    {
+      "id": "LD-026",
+      "title": "Project list screen with search and filters",
+      "milestone": "M2",
+      "prdRefs": ["FR-09", "§4.4"],
+      "adrRefs": [],
+      "estimateHours": 3,
+      "status": "pending",
+      "dependsOn": ["LD-024"],
+      "labels": ["frontend"],
+      "description": "Responsive table with search and owner/customer/health/status filters reflected in the URL.",
+      "acceptanceCriteria": [
+        "Filters survive reload via deep link",
+        "Empty state explains how to create a project"
+      ]
+    },
+    {
+      "id": "LD-027",
+      "title": "Project overview screen",
+      "milestone": "M2",
+      "prdRefs": ["FR-09", "§4.5"],
+      "adrRefs": [],
+      "estimateHours": 3,
+      "status": "pending",
+      "dependsOn": ["LD-024", "LD-046"],
+      "labels": ["frontend"],
+      "description": "Progress, current phase, key dates, health with reasons and next actions.",
+      "acceptanceCriteria": ["Health reasons are visible", "Next actions list ready tasks only"]
+    },
+    {
+      "id": "LD-028",
+      "title": "Project lifecycle state machine and transition endpoint",
+      "milestone": "M2",
+      "prdRefs": ["FR-03"],
+      "adrRefs": ["ADR-0008"],
+      "estimateHours": 4,
+      "status": "pending",
+      "dependsOn": ["LD-024"],
+      "labels": ["backend"],
+      "description": "POST /projects/:id/transition enforcing DRAFT to COMPLETED transitions, with reasons required for ON_HOLD and CANCELLED.",
+      "acceptanceCriteria": [
+        "Illegal transitions return 409 INVALID_STATE_TRANSITION",
+        "Every transition writes a project event and audit row"
+      ]
+    },
+    {
+      "id": "LD-029",
+      "title": "Tasks API with subtasks and optimistic locking",
+      "milestone": "M2",
+      "prdRefs": ["FR-04"],
+      "adrRefs": ["ADR-0006"],
+      "estimateHours": 5,
+      "status": "pending",
+      "dependsOn": ["LD-022"],
+      "labels": ["backend"],
+      "description": "List, create and update project tasks and one level of subtasks with visibility, evidence flag and version checks.",
+      "acceptanceCriteria": [
+        "Subtask of a subtask returns 422",
+        "Customer users never receive provider-only tasks"
+      ]
+    },
+    {
+      "id": "LD-030",
+      "title": "Task dependency endpoints backed by the graph domain",
+      "milestone": "M2",
+      "prdRefs": ["FR-04", "L-04"],
+      "adrRefs": ["ADR-0014"],
+      "estimateHours": 3,
+      "status": "pending",
+      "dependsOn": ["LD-021", "LD-029"],
+      "labels": ["backend"],
+      "description": "Add and remove task dependencies by loading the project graph, applying the pure domain operation and persisting under a project row lock.",
+      "acceptanceCriteria": [
+        "Cycle returns 422 with the cycle path",
+        "Concurrent inserts cannot create a cycle"
+      ]
+    },
+    {
+      "id": "LD-031",
+      "title": "Task transitions with dependency gate and manager override",
+      "milestone": "M2",
+      "prdRefs": ["FR-04", "L-05"],
+      "adrRefs": ["ADR-0014"],
+      "estimateHours": 4,
+      "status": "pending",
+      "dependsOn": ["LD-030"],
+      "labels": ["backend"],
+      "description": "POST /tasks/:id/transition blocks DONE while required predecessors are incomplete unless a manager supplies an override reason.",
+      "acceptanceCriteria": [
+        "Blocked completion returns 422 listing predecessors",
+        "Override reason is stored and audited"
+      ]
+    },
+    {
+      "id": "LD-032",
+      "title": "Task list screen with hierarchy",
+      "milestone": "M2",
+      "prdRefs": ["FR-04", "§4.6"],
+      "adrRefs": [],
+      "estimateHours": 4,
+      "status": "pending",
+      "dependsOn": ["LD-029"],
+      "labels": ["frontend"],
+      "description": "Task table grouped by phase with subtasks, owner side, assignee, due date, status and overdue markers.",
+      "acceptanceCriteria": [
+        "Overdue is computed in the project timezone",
+        "Rows link to the task detail page"
+      ]
+    },
+    {
+      "id": "LD-033",
+      "title": "Kanban board by task status",
+      "milestone": "M2",
+      "prdRefs": ["FR-04", "§4.7"],
+      "adrRefs": [],
+      "estimateHours": 4,
+      "status": "pending",
+      "dependsOn": ["LD-031"],
+      "labels": ["frontend", "ux"],
+      "description": "Board with one column per task status; moves call the transition endpoint and surface dependency errors.",
+      "acceptanceCriteria": [
+        "Blocked move shows the predecessor list",
+        "Board is operable by keyboard"
+      ]
+    },
+    {
+      "id": "LD-034",
+      "title": "Task detail page with checklist, dependencies and comments",
+      "milestone": "M2",
+      "prdRefs": ["FR-04", "§4.9"],
+      "adrRefs": [],
+      "estimateHours": 5,
+      "status": "pending",
+      "dependsOn": ["LD-029", "LD-035"],
+      "labels": ["frontend"],
+      "description": "Task page showing checklist, predecessors and successors, comments and evidence with role-appropriate actions.",
+      "acceptanceCriteria": [
+        "Customer users see only shared comments",
+        "Checklist items record who completed them"
+      ]
+    },
+    {
+      "id": "LD-035",
+      "title": "Task comments API with visibility",
+      "milestone": "M2",
+      "prdRefs": ["FR-04", "FR-07"],
+      "adrRefs": ["ADR-0013"],
+      "estimateHours": 3,
+      "status": "pending",
+      "dependsOn": ["LD-029"],
+      "labels": ["backend"],
+      "description": "GET/POST /tasks/:id/comments with INTERNAL or SHARED visibility filtered at the query layer.",
+      "acceptanceCriteria": [
+        "Customer comment is always SHARED",
+        "Internal comments never appear in customer responses"
+      ]
+    },
+    {
+      "id": "LD-036",
+      "title": "Schedule rebaseline with preview and confirmation",
+      "milestone": "M2",
+      "prdRefs": ["FR-03", "L-17"],
+      "adrRefs": ["ADR-0008"],
+      "estimateHours": 4,
+      "status": "pending",
+      "dependsOn": ["LD-029"],
+      "labels": ["backend", "frontend"],
+      "description": "POST /projects/:id/rebaseline returns a preview of moved due dates and applies them only with explicit confirmation and an audit entry.",
+      "acceptanceCriteria": [
+        "Changing target go-live alone moves no due dates",
+        "Applied rebaseline is visible in history"
+      ]
+    },
+    {
+      "id": "LD-037",
+      "title": "Milestone schema and API",
+      "milestone": "M3",
+      "prdRefs": ["FR-05", "§6"],
+      "adrRefs": ["ADR-0017"],
+      "estimateHours": 3,
+      "status": "pending",
+      "dependsOn": ["LD-022"],
+      "labels": ["backend", "database"],
+      "description": "Tables milestones, milestone_required_tasks and milestone_reviews plus list/create under /projects/:id/milestones.",
+      "acceptanceCriteria": [
+        "Required tasks must belong to the same project",
+        "Customer users see only shared milestones"
+      ]
+    },
+    {
+      "id": "LD-038",
+      "title": "Milestone submission gate",
+      "milestone": "M3",
+      "prdRefs": ["FR-05", "L-08"],
+      "adrRefs": ["ADR-0017"],
+      "estimateHours": 4,
+      "status": "pending",
+      "dependsOn": ["LD-037", "LD-041"],
+      "labels": ["backend"],
+      "description": "POST /milestones/:id/submit allowed for managers only when linked tasks are done and required evidence exists; opens a new review round.",
+      "acceptanceCriteria": [
+        "Incomplete milestone returns 422 with missing tasks and evidence",
+        "Non-manager receives 403"
+      ]
+    },
+    {
+      "id": "LD-039",
+      "title": "Milestone decision with immutable review rounds",
+      "milestone": "M3",
+      "prdRefs": ["FR-05", "L-09", "L-10"],
+      "adrRefs": ["ADR-0017"],
+      "estimateHours": 4,
+      "status": "pending",
+      "dependsOn": ["LD-038"],
+      "labels": ["backend"],
+      "description": "POST /milestones/:id/decide records accept or reject by a customer owner (or manager for internal milestones) with feedback; reviews are append-only.",
+      "acceptanceCriteria": [
+        "Rejection requires resubmission as a new round",
+        "Acceptance records approver and timestamp"
+      ]
+    },
+    {
+      "id": "LD-040",
+      "title": "Milestones timeline screen",
+      "milestone": "M3",
+      "prdRefs": ["FR-05", "§4.8"],
+      "adrRefs": [],
+      "estimateHours": 3,
+      "status": "pending",
+      "dependsOn": ["LD-037"],
+      "labels": ["frontend"],
+      "description": "Timeline of milestones with target dates, status and review history.",
+      "acceptanceCriteria": ["Prior review rounds are listed", "Submit action only for managers"]
+    },
+    {
+      "id": "LD-041",
+      "title": "Local file storage service with type and size validation",
+      "milestone": "M3",
+      "prdRefs": ["FR-08"],
+      "adrRefs": ["ADR-0011"],
+      "estimateHours": 4,
+      "status": "pending",
+      "dependsOn": ["LD-002"],
+      "labels": ["backend", "security"],
+      "description": "Streamed uploads to UPLOAD_DIR with random stored names, MIME/extension allow-list, size limit and SHA-256 checksum.",
+      "acceptanceCriteria": [
+        "Disallowed types return 422",
+        "Files are never served with an executable content type"
+      ]
+    },
+    {
+      "id": "LD-042",
+      "title": "Task and project file endpoints with visibility-enforced download",
+      "milestone": "M3",
+      "prdRefs": ["FR-08", "L-07", "L-18"],
+      "adrRefs": ["ADR-0011", "ADR-0013"],
+      "estimateHours": 5,
+      "status": "pending",
+      "dependsOn": ["LD-041", "LD-029"],
+      "labels": ["backend", "security"],
+      "description": "Upload and list files on tasks, milestones and projects with INTERNAL or SHARED_WITH_CUSTOMER scope; download checks tenant, project and visibility.",
+      "acceptanceCriteria": [
+        "Customer download of an internal file returns 404",
+        "Files remain downloadable after restart"
+      ]
+    },
+    {
+      "id": "LD-043",
+      "title": "Deliverable version history and shared files screen",
+      "milestone": "M3",
+      "prdRefs": ["FR-08", "§4.10"],
+      "adrRefs": [],
+      "estimateHours": 4,
+      "status": "pending",
+      "dependsOn": ["LD-042"],
+      "labels": ["frontend", "backend"],
+      "description": "Each re-upload creates a new version record; the files screen shows current and older revisions with access classification.",
+      "acceptanceCriteria": [
+        "Older revisions remain downloadable",
+        "Access classification badge on every row"
+      ]
+    },
+    {
+      "id": "LD-044",
+      "title": "Customer milestone acceptance page",
+      "milestone": "M3",
+      "prdRefs": ["FR-05", "§4.14"],
+      "adrRefs": [],
+      "estimateHours": 3,
+      "status": "pending",
+      "dependsOn": ["LD-039"],
+      "labels": ["frontend"],
+      "description": "Customer-owner page to accept or reject a submitted milestone with feedback and evidence links.",
+      "acceptanceCriteria": [
+        "Customer members see the page read-only",
+        "Reject requires feedback text"
+      ]
+    },
+    {
+      "id": "LD-045",
+      "title": "Risk and blocker register API",
+      "milestone": "M4",
+      "prdRefs": ["FR-06"],
+      "adrRefs": ["ADR-0016"],
+      "estimateHours": 4,
+      "status": "pending",
+      "dependsOn": ["LD-022"],
+      "labels": ["backend", "database"],
+      "description": "risk_items table and /projects/:id/risks endpoints with type, severity, owner, mitigation, launch_blocking and open age.",
+      "acceptanceCriteria": [
+        "Only launch_blocking open items affect launch and health",
+        "Status changes are audited"
+      ]
+    },
+    {
+      "id": "LD-046",
+      "title": "Project health and progress from SQL records",
+      "milestone": "M4",
+      "prdRefs": ["FR-09", "L-11", "L-12"],
+      "adrRefs": ["ADR-0016"],
+      "estimateHours": 3,
+      "status": "pending",
+      "dependsOn": ["LD-020", "LD-045", "LD-037"],
+      "labels": ["backend"],
+      "description": "Load health inputs from tasks, milestones and risks and run the pure health calculator; progress is completed required tasks over total with a documented zero rule.",
+      "acceptanceCriteria": [
+        "Opening a blocking risk yields AT_RISK with its reason",
+        "Resolving it recalculates deterministically"
+      ]
+    },
+    {
+      "id": "LD-047",
+      "title": "Risk register screen",
+      "milestone": "M4",
+      "prdRefs": ["FR-06", "§4.11"],
+      "adrRefs": [],
+      "estimateHours": 3,
+      "status": "pending",
+      "dependsOn": ["LD-045"],
+      "labels": ["frontend"],
+      "description": "Register with severity, owner, next action, open age and launch-blocking filter.",
+      "acceptanceCriteria": [
+        "Launch-blocking items are visually distinct",
+        "Empty state for projects with no risks"
+      ]
+    },
+    {
+      "id": "LD-048",
+      "title": "Launch gates for READY_FOR_LAUNCH and LIVE",
+      "milestone": "M4",
+      "prdRefs": ["FR-03", "L-13", "L-14"],
+      "adrRefs": ["ADR-0017"],
+      "estimateHours": 4,
+      "status": "pending",
+      "dependsOn": ["LD-028", "LD-039", "LD-045"],
+      "labels": ["backend", "security"],
+      "description": "READY_FOR_LAUNCH requires launch-blocking tasks done, required milestones accepted and no open blocking risks; LIVE requires a manager confirmation and records the actual go-live date and decision.",
+      "acceptanceCriteria": [
+        "Early go-live returns 422 listing unmet gates",
+        "LIVE persists actual date and decision log entry"
+      ]
+    },
+    {
+      "id": "LD-049",
+      "title": "Portfolio dashboard with health and upcoming go-lives",
+      "milestone": "M4",
+      "prdRefs": ["FR-09", "§4.2", "L-01"],
+      "adrRefs": [],
+      "estimateHours": 5,
+      "status": "pending",
+      "dependsOn": ["LD-046"],
+      "labels": ["frontend", "backend"],
+      "description": "Provider home showing projects by health, upcoming go-lives and overdue tasks by side, all derived from SQL.",
+      "acceptanceCriteria": [
+        "Numbers match database counts",
+        "Health reasons visible on hover and focus"
+      ]
+    },
+    {
+      "id": "LD-050",
+      "title": "Role-specific home routing for provider and customer users",
+      "milestone": "M4",
+      "prdRefs": ["§4.1", "§3"],
+      "adrRefs": ["ADR-0013"],
+      "estimateHours": 2,
+      "status": "pending",
+      "dependsOn": ["LD-006"],
+      "labels": ["frontend"],
+      "description": "After login, provider roles land on the portfolio and customer roles on the customer portal; provider navigation is never shown to customers.",
+      "acceptanceCriteria": [
+        "Customer users cannot reach provider routes",
+        "Deep links redirect correctly after login"
+      ]
+    },
+    {
+      "id": "LD-051",
+      "title": "Customer portal API with query-layer visibility filtering",
+      "milestone": "M5",
+      "prdRefs": ["FR-07", "L-06", "L-15"],
+      "adrRefs": ["ADR-0013"],
+      "estimateHours": 5,
+      "status": "pending",
+      "dependsOn": ["LD-029", "LD-037"],
+      "labels": ["backend", "security"],
+      "description": "/customer/projects, /customer/projects/:id and /customer/tasks/:id return only the caller customer account data and customer-visible rows.",
+      "acceptanceCriteria": [
+        "Another customer project returns 404 without metadata",
+        "Provider-only task by direct id returns 404"
+      ]
+    },
+    {
+      "id": "LD-052",
+      "title": "Customer portal home and project portal screens",
+      "milestone": "M5",
+      "prdRefs": ["FR-07", "§4.12", "§4.13"],
+      "adrRefs": [],
+      "estimateHours": 5,
+      "status": "pending",
+      "dependsOn": ["LD-051"],
+      "labels": ["frontend", "ux"],
+      "description": "Customer home across accessible projects and a project portal with deliverables, pending tasks, milestones and comments, visually distinct from the provider workspace.",
+      "acceptanceCriteria": [
+        "Only customer-visible items render",
+        "Pending customer actions are listed first"
+      ]
+    },
+    {
+      "id": "LD-053",
+      "title": "Project activity timeline and decision register",
+      "milestone": "M5",
+      "prdRefs": ["FR-10", "§4.17"],
+      "adrRefs": ["ADR-0008"],
+      "estimateHours": 4,
+      "status": "pending",
+      "dependsOn": ["LD-022"],
+      "labels": ["backend", "frontend"],
+      "description": "project_events written alongside state changes and GET /projects/:id/activity with internal entries excluded for customer users.",
+      "acceptanceCriteria": [
+        "Customer timeline excludes internal events",
+        "Launch decisions appear in the decision register"
+      ]
+    },
+    {
+      "id": "LD-054",
+      "title": "In-app notifications and idempotent reminder worker",
+      "milestone": "M5",
+      "prdRefs": ["FR-07", "FR-10"],
+      "adrRefs": ["ADR-0012"],
+      "estimateHours": 5,
+      "status": "pending",
+      "dependsOn": ["LD-029", "LD-037"],
+      "labels": ["backend"],
+      "description": "notifications table, /notifications endpoints and a periodic checker for due and overdue tasks keyed to avoid duplicates.",
+      "acceptanceCriteria": [
+        "Running the checker twice creates no duplicates",
+        "Notifications can be marked read"
+      ]
+    },
+    {
+      "id": "LD-055",
+      "title": "Notifications and personal work queue screen",
+      "milestone": "M5",
+      "prdRefs": ["FR-07", "§4.19"],
+      "adrRefs": [],
+      "estimateHours": 3,
+      "status": "pending",
+      "dependsOn": ["LD-054"],
+      "labels": ["frontend"],
+      "description": "Notification list with mark-as-read and a personal queue of assigned open tasks.",
+      "acceptanceCriteria": ["Unread count updates after marking read", "Queue sorts by due date"]
+    },
+    {
+      "id": "LD-056",
+      "title": "Portfolio reports API",
+      "milestone": "M6",
+      "prdRefs": ["FR-09"],
+      "adrRefs": [],
+      "estimateHours": 5,
+      "status": "pending",
+      "dependsOn": ["LD-046"],
+      "labels": ["backend"],
+      "description": "GET /reports/portfolio with planned vs actual go-live, average cycle duration, overdue tasks by side, common blockers and acceptance turnaround.",
+      "acceptanceCriteria": [
+        "Every figure is computed from SQL",
+        "Filters match the project list filters"
+      ]
+    },
+    {
+      "id": "LD-057",
+      "title": "CSV export of filtered project data",
+      "milestone": "M6",
+      "prdRefs": ["FR-09", "L-19"],
+      "adrRefs": [],
+      "estimateHours": 3,
+      "status": "pending",
+      "dependsOn": ["LD-056"],
+      "labels": ["backend", "security"],
+      "description": "GET /reports/export.csv streams the currently authorized filter with formula-injection-safe cells.",
+      "acceptanceCriteria": [
+        "CSV rows equal the filtered list",
+        "Cells starting with = + - @ are escaped"
+      ]
+    },
+    {
+      "id": "LD-058",
+      "title": "Reporting screen with charts",
+      "milestone": "M6",
+      "prdRefs": ["FR-09", "§4.18"],
+      "adrRefs": [],
+      "estimateHours": 4,
+      "status": "pending",
+      "dependsOn": ["LD-056"],
+      "labels": ["frontend"],
+      "description": "Charts and KPI tiles for portfolio reports using locally bundled assets only.",
+      "acceptanceCriteria": [
+        "No external asset requests",
+        "Charts have accessible text alternatives"
+      ]
+    },
+    {
+      "id": "LD-059",
+      "title": "Audit log API and team and settings screen",
+      "milestone": "M6",
+      "prdRefs": ["FR-10", "§4.20"],
+      "adrRefs": ["ADR-0008"],
+      "estimateHours": 4,
+      "status": "pending",
+      "dependsOn": ["LD-012"],
+      "labels": ["backend", "frontend"],
+      "description": "GET /audit-logs for provider admins with filters, plus team membership and organization settings screen.",
+      "acceptanceCriteria": ["Non-admins receive 403", "Audit entries are read-only"]
+    },
+    {
+      "id": "LD-060",
+      "title": "Full demonstration dataset and golden scenario seed",
+      "milestone": "M6",
+      "prdRefs": ["§8"],
+      "adrRefs": [],
+      "estimateHours": 5,
+      "status": "pending",
+      "dependsOn": ["LD-018", "LD-023", "LD-039", "LD-045"],
+      "labels": ["database"],
+      "description": "Seed 8-12 projects across health states, 100+ tasks with dependencies, 20+ milestones, 10 risks and several approval rounds, including the Atlas Retail golden scenario.",
+      "acceptanceCriteria": [
+        "Seed is deterministic and idempotent",
+        "Golden scenario starts at step 1"
+      ]
+    },
+    {
+      "id": "LD-061",
+      "title": "Playwright acceptance suite L-01 to L-10",
+      "milestone": "M6",
+      "prdRefs": ["§9"],
+      "adrRefs": ["ADR-0010"],
+      "estimateHours": 6,
+      "status": "pending",
+      "dependsOn": ["LD-060"],
+      "labels": ["testing"],
+      "description": "Browser tests against real SQL data for portfolio, project creation, snapshots, cycles, dependency gates, evidence and milestone reviews.",
+      "acceptanceCriteria": ["L-01 to L-10 pass in CI", "Database reset before the suite"]
+    },
+    {
+      "id": "LD-062",
+      "title": "Playwright acceptance suite L-11 to L-19",
+      "milestone": "M6",
+      "prdRefs": ["§9"],
+      "adrRefs": ["ADR-0010"],
+      "estimateHours": 6,
+      "status": "pending",
+      "dependsOn": ["LD-060"],
+      "labels": ["testing"],
+      "description": "Browser tests for health, launch gates, customer isolation, tenant isolation, rebaseline, restart persistence and CSV export.",
+      "acceptanceCriteria": ["L-11 to L-19 pass in CI", "Restart test reuses persisted files"]
+    },
+    {
+      "id": "LD-063",
+      "title": "Tenant and customer isolation regression suite",
+      "milestone": "M6",
+      "prdRefs": ["§3", "L-06", "L-15", "L-16"],
+      "adrRefs": ["ADR-0003", "ADR-0013"],
+      "estimateHours": 4,
+      "status": "pending",
+      "dependsOn": ["LD-051"],
+      "labels": ["testing", "security"],
+      "description": "API-level suite that iterates every resource endpoint as another tenant and another customer and asserts 403/404 without leaked fields.",
+      "acceptanceCriteria": [
+        "Every registered route is covered",
+        "Responses contain no foreign identifiers"
+      ]
+    },
+    {
+      "id": "LD-064",
+      "title": "Accessibility and responsive UX pass",
+      "milestone": "M6",
+      "prdRefs": ["§4"],
+      "adrRefs": [],
+      "estimateHours": 4,
+      "status": "pending",
+      "dependsOn": ["LD-052"],
+      "labels": ["ux", "frontend"],
+      "description": "WCAG 2.1 AA review of all screens: focus management in dialogs, contrast, keyboard navigation and responsive tables.",
+      "acceptanceCriteria": [
+        "Automated axe checks pass on core screens",
+        "Dialogs trap and restore focus"
+      ]
+    },
+    {
+      "id": "LD-065",
+      "title": "Production container image and deployment pipeline",
+      "milestone": "M6",
+      "prdRefs": ["§2"],
+      "adrRefs": ["ADR-0009"],
+      "estimateHours": 5,
+      "status": "pending",
+      "dependsOn": ["LD-001"],
+      "labels": ["devops"],
+      "description": "Multi-stage container image, migration step in CD and environment-specific configuration for the planned production topology.",
+      "acceptanceCriteria": [
+        "Image runs as non-root",
+        "Migrations run before new instances receive traffic"
+      ]
+    }
+  ]
+}

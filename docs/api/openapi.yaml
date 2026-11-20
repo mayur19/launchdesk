@@ -1,0 +1,2440 @@
+openapi: 3.1.0
+info:
+  title: LaunchDesk API
+  version: 0.1.0
+  description:
+    'Customer onboarding and implementation API. Every operation is marked `x-status: implemented|pending`
+    and `x-ticket` with its backlog id. Pending operations return 501 NOT_IMPLEMENTED with the ticket in `error.details.ticket`.
+    See docs/api/README.md for conventions.'
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: http://localhost:5173/api
+    description: Local web dev server (proxied)
+  - url: http://127.0.0.1:4103/api
+    description: Local API
+tags:
+  - name: Health
+  - name: Auth
+  - name: Customers
+  - name: Templates
+  - name: Projects
+  - name: Tasks
+  - name: Milestones
+  - name: Risks
+  - name: Files
+  - name: Activity
+  - name: Customer portal
+  - name: Reports
+  - name: Notifications
+  - name: Audit
+paths:
+  /health/live:
+    get:
+      tags:
+        - Health
+      summary: Liveness probe
+      operationId: getLive
+      x-status: implemented
+      x-ticket: LD-004
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/HealthStatus'
+      security: []
+  /health/ready:
+    get:
+      tags:
+        - Health
+      summary: Readiness probe (checks PostgreSQL)
+      operationId: getReady
+      x-status: implemented
+      x-ticket: LD-004
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/HealthStatus'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+      security: []
+  /v1/auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Sign in with email and password
+      operationId: login
+      x-status: implemented
+      x-ticket: LD-003
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/SessionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      security: []
+  /v1/auth/session:
+    get:
+      tags:
+        - Auth
+      summary: Current session and CSRF token
+      operationId: getSession
+      x-status: implemented
+      x-ticket: LD-003
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/SessionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+      security:
+        - sessionCookie: []
+  /v1/auth/logout:
+    post:
+      tags:
+        - Auth
+      summary: Sign out and revoke the session
+      operationId: logout
+      x-status: implemented
+      x-ticket: LD-003
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          loggedOut:
+                            type: boolean
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/me:
+    get:
+      tags:
+        - Auth
+      summary: Current user
+      operationId: getMe
+      x-status: implemented
+      x-ticket: LD-003
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/SessionUser'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+      security:
+        - sessionCookie: []
+  /v1/customers:
+    get:
+      tags:
+        - Customers
+      summary: List customer accounts of the caller tenant
+      operationId: listCustomers
+      x-status: implemented
+      x-ticket: LD-008
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/CustomerAccount'
+                      meta:
+                        $ref: '#/components/schemas/PageMeta'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER, PROVIDER_CONTRIBUTOR.'
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum:
+              - ACTIVE
+              - ARCHIVED
+        - name: search
+          in: query
+          schema:
+            type: string
+            maxLength: 100
+      security:
+        - sessionCookie: []
+    post:
+      tags:
+        - Customers
+      summary: Create a customer account (audited)
+      operationId: createCustomer
+      x-status: implemented
+      x-ticket: LD-008
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CustomerAccount'
+          headers:
+            Location:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+      description: 'Roles: PROVIDER_ADMIN.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCustomerRequest'
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/customers/{id}:
+    get:
+      tags:
+        - Customers
+      summary: Get a customer account (404 for other tenants)
+      operationId: getCustomer
+      x-status: implemented
+      x-ticket: LD-008
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CustomerAccount'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER, PROVIDER_CONTRIBUTOR.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      security:
+        - sessionCookie: []
+    patch:
+      tags:
+        - Customers
+      summary: Update customer account details
+      operationId: updateCustomer
+      x-status: pending
+      x-ticket: LD-011
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+      description: 'Roles: PROVIDER_ADMIN.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/customers/{id}/archive:
+    post:
+      tags:
+        - Customers
+      summary: Archive a customer account (soft)
+      operationId: archiveCustomer
+      x-status: pending
+      x-ticket: LD-011
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      description: 'Roles: PROVIDER_ADMIN.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/customers/{id}/contacts:
+    get:
+      tags:
+        - Customers
+      summary: List customer contacts
+      operationId: listCustomerContacts
+      x-status: pending
+      x-ticket: LD-013
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER, PROVIDER_CONTRIBUTOR.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      security:
+        - sessionCookie: []
+    post:
+      tags:
+        - Customers
+      summary: Add a customer contact (local credentials, no email)
+      operationId: createCustomerContact
+      x-status: pending
+      x-ticket: LD-013
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/templates:
+    get:
+      tags:
+        - Templates
+      summary: List implementation templates
+      operationId: listTemplates
+      x-status: pending
+      x-ticket: LD-015
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER, PROVIDER_CONTRIBUTOR.'
+      security:
+        - sessionCookie: []
+    post:
+      tags:
+        - Templates
+      summary: Create a template
+      operationId: createTemplate
+      x-status: pending
+      x-ticket: LD-015
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/templates/{id}:
+    get:
+      tags:
+        - Templates
+      summary: Get a template with phases, tasks, dependencies and milestones
+      operationId: getTemplate
+      x-status: pending
+      x-ticket: LD-015
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER, PROVIDER_CONTRIBUTOR.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      security:
+        - sessionCookie: []
+    patch:
+      tags:
+        - Templates
+      summary: Update a template (bumps version)
+      operationId: updateTemplate
+      x-status: pending
+      x-ticket: LD-015
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/templates/{id}/archive:
+    post:
+      tags:
+        - Templates
+      summary: Archive a template
+      operationId: archiveTemplate
+      x-status: pending
+      x-ticket: LD-015
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/templates/{id}/duplicate:
+    post:
+      tags:
+        - Templates
+      summary: Duplicate a template
+      operationId: duplicateTemplate
+      x-status: pending
+      x-ticket: LD-015
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/templates/{id}/validate:
+    post:
+      tags:
+        - Templates
+      summary: Validate template dependency graph (422 with cycle path)
+      operationId: validateTemplate
+      x-status: pending
+      x-ticket: LD-016
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/projects:
+    get:
+      tags:
+        - Projects
+      summary: List projects with owner/customer/health/status/month filters
+      operationId: listProjects
+      x-status: pending
+      x-ticket: LD-024
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER, PROVIDER_CONTRIBUTOR.'
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      security:
+        - sessionCookie: []
+    post:
+      tags:
+        - Projects
+      summary: Create a project from a template snapshot
+      operationId: createProject
+      x-status: pending
+      x-ticket: LD-023
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/projects/{id}:
+    get:
+      tags:
+        - Projects
+      summary: Get a project with progress and health reasons
+      operationId: getProject
+      x-status: pending
+      x-ticket: LD-024
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER, PROVIDER_CONTRIBUTOR.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      security:
+        - sessionCookie: []
+    patch:
+      tags:
+        - Projects
+      summary: Update a project (optimistic locking, 409 on stale version)
+      operationId: updateProject
+      x-status: pending
+      x-ticket: LD-024
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/projects/{id}/rebaseline:
+    post:
+      tags:
+        - Projects
+      summary: Preview or apply a schedule rebaseline
+      operationId: rebaselineProject
+      x-status: pending
+      x-ticket: LD-036
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/projects/{id}/transition:
+    post:
+      tags:
+        - Projects
+      summary: Lifecycle transition incl. launch gates
+      operationId: transitionProject
+      x-status: pending
+      x-ticket: LD-028
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/projects/{projectId}/tasks:
+    get:
+      tags:
+        - Tasks
+      summary: List project tasks
+      operationId: listProjectTasks
+      x-status: pending
+      x-ticket: LD-029
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER, PROVIDER_CONTRIBUTOR.'
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      security:
+        - sessionCookie: []
+    post:
+      tags:
+        - Tasks
+      summary: Create a task or subtask
+      operationId: createTask
+      x-status: pending
+      x-ticket: LD-029
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER.'
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/tasks/{id}:
+    get:
+      tags:
+        - Tasks
+      summary: Get a task
+      operationId: getTask
+      x-status: pending
+      x-ticket: LD-029
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER, PROVIDER_CONTRIBUTOR.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      security:
+        - sessionCookie: []
+    patch:
+      tags:
+        - Tasks
+      summary: Update a task (optimistic locking)
+      operationId: updateTask
+      x-status: pending
+      x-ticket: LD-029
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER, PROVIDER_CONTRIBUTOR.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/tasks/{id}/transition:
+    post:
+      tags:
+        - Tasks
+      summary: Change task status; DONE gated by predecessors unless overridden
+      operationId: transitionTask
+      x-status: pending
+      x-ticket: LD-031
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER, PROVIDER_CONTRIBUTOR.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/tasks/{id}/dependencies:
+    post:
+      tags:
+        - Tasks
+      summary: Add a predecessor (422 with cycle path)
+      operationId: addTaskDependency
+      x-status: pending
+      x-ticket: LD-030
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/tasks/{id}/dependencies/{predecessorId}:
+    delete:
+      tags:
+        - Tasks
+      summary: Remove a predecessor
+      operationId: removeTaskDependency
+      x-status: pending
+      x-ticket: LD-030
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - name: predecessorId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/tasks/{id}/comments:
+    get:
+      tags:
+        - Tasks
+      summary: List task comments
+      operationId: listTaskComments
+      x-status: pending
+      x-ticket: LD-035
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER, PROVIDER_CONTRIBUTOR.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      security:
+        - sessionCookie: []
+    post:
+      tags:
+        - Tasks
+      summary: Add a task comment (INTERNAL or SHARED)
+      operationId: createTaskComment
+      x-status: pending
+      x-ticket: LD-035
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER, PROVIDER_CONTRIBUTOR.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/tasks/{id}/files:
+    get:
+      tags:
+        - Files
+      summary: List task evidence files
+      operationId: listTaskFiles
+      x-status: pending
+      x-ticket: LD-042
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER, PROVIDER_CONTRIBUTOR.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      security:
+        - sessionCookie: []
+    post:
+      tags:
+        - Files
+      summary: Upload task evidence (multipart)
+      operationId: uploadTaskFile
+      x-status: pending
+      x-ticket: LD-042
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER, PROVIDER_CONTRIBUTOR.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/projects/{projectId}/milestones:
+    get:
+      tags:
+        - Milestones
+      summary: List project milestones
+      operationId: listMilestones
+      x-status: pending
+      x-ticket: LD-037
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER, PROVIDER_CONTRIBUTOR.'
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      security:
+        - sessionCookie: []
+    post:
+      tags:
+        - Milestones
+      summary: Create a milestone
+      operationId: createMilestone
+      x-status: pending
+      x-ticket: LD-037
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER.'
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/milestones/{id}/submit:
+    post:
+      tags:
+        - Milestones
+      summary: Submit for acceptance (422 lists missing tasks/evidence)
+      operationId: submitMilestone
+      x-status: pending
+      x-ticket: LD-038
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/milestones/{id}/decide:
+    post:
+      tags:
+        - Milestones
+      summary: Accept or reject a submitted milestone
+      operationId: decideMilestone
+      x-status: pending
+      x-ticket: LD-039
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+      description: 'Roles: CUSTOMER_OWNER, PROVIDER_ADMIN, IMPLEMENTATION_MANAGER.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/projects/{projectId}/risks:
+    get:
+      tags:
+        - Risks
+      summary: List risks, issues and decisions
+      operationId: listRisks
+      x-status: pending
+      x-ticket: LD-045
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER, PROVIDER_CONTRIBUTOR.'
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      security:
+        - sessionCookie: []
+    post:
+      tags:
+        - Risks
+      summary: Create a risk item
+      operationId: createRisk
+      x-status: pending
+      x-ticket: LD-045
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER, PROVIDER_CONTRIBUTOR.'
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/risks/{id}:
+    patch:
+      tags:
+        - Risks
+      summary: Update a risk item
+      operationId: updateRisk
+      x-status: pending
+      x-ticket: LD-045
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER, PROVIDER_CONTRIBUTOR.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/projects/{projectId}/activity:
+    get:
+      tags:
+        - Activity
+      summary: Project activity timeline and decision register
+      operationId: listProjectActivity
+      x-status: pending
+      x-ticket: LD-053
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER, PROVIDER_CONTRIBUTOR.'
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      security:
+        - sessionCookie: []
+  /v1/projects/{projectId}/files:
+    get:
+      tags:
+        - Files
+      summary: List project files (current and older versions)
+      operationId: listProjectFiles
+      x-status: pending
+      x-ticket: LD-042
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER, PROVIDER_CONTRIBUTOR.'
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      security:
+        - sessionCookie: []
+    post:
+      tags:
+        - Files
+      summary: Upload a project file (multipart)
+      operationId: uploadProjectFile
+      x-status: pending
+      x-ticket: LD-042
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER, PROVIDER_CONTRIBUTOR.'
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/files/{id}/download:
+    get:
+      tags:
+        - Files
+      summary: Download a file (tenant, project and visibility checked)
+      operationId: downloadFile
+      x-status: pending
+      x-ticket: LD-042
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER, PROVIDER_CONTRIBUTOR, CUSTOMER_OWNER, CUSTOMER_MEMBER.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      security:
+        - sessionCookie: []
+  /v1/customer/projects:
+    get:
+      tags:
+        - Customer portal
+      summary: Projects of the caller customer account
+      operationId: listCustomerProjects
+      x-status: pending
+      x-ticket: LD-051
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      description: 'Roles: CUSTOMER_OWNER, CUSTOMER_MEMBER.'
+      security:
+        - sessionCookie: []
+  /v1/customer/projects/{id}:
+    get:
+      tags:
+        - Customer portal
+      summary: Customer-visible project detail
+      operationId: getCustomerProject
+      x-status: pending
+      x-ticket: LD-051
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      description: 'Roles: CUSTOMER_OWNER, CUSTOMER_MEMBER.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      security:
+        - sessionCookie: []
+  /v1/customer/tasks/{id}:
+    get:
+      tags:
+        - Customer portal
+      summary: Customer-visible task detail
+      operationId: getCustomerTask
+      x-status: pending
+      x-ticket: LD-051
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      description: 'Roles: CUSTOMER_OWNER, CUSTOMER_MEMBER.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      security:
+        - sessionCookie: []
+  /v1/customer/tasks/{id}/comments:
+    post:
+      tags:
+        - Customer portal
+      summary: Add a shared comment to a customer task
+      operationId: createCustomerTaskComment
+      x-status: pending
+      x-ticket: LD-035
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      description: 'Roles: CUSTOMER_OWNER, CUSTOMER_MEMBER.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/customer/tasks/{id}/files:
+    post:
+      tags:
+        - Customer portal
+      summary: Upload evidence to a customer task
+      operationId: uploadCustomerTaskFile
+      x-status: pending
+      x-ticket: LD-042
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      description: 'Roles: CUSTOMER_OWNER, CUSTOMER_MEMBER.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/reports/portfolio:
+    get:
+      tags:
+        - Reports
+      summary: Portfolio KPIs derived from SQL
+      operationId: getPortfolioReport
+      x-status: pending
+      x-ticket: LD-056
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER.'
+      security:
+        - sessionCookie: []
+  /v1/reports/export.csv:
+    get:
+      tags:
+        - Reports
+      summary: CSV export of the current authorized filter
+      operationId: exportProjectsCsv
+      x-status: pending
+      x-ticket: LD-057
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER.'
+      security:
+        - sessionCookie: []
+  /v1/notifications:
+    get:
+      tags:
+        - Notifications
+      summary: List in-app notifications
+      operationId: listNotifications
+      x-status: pending
+      x-ticket: LD-054
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER, PROVIDER_CONTRIBUTOR, CUSTOMER_OWNER, CUSTOMER_MEMBER.'
+      security:
+        - sessionCookie: []
+  /v1/notifications/{id}/read:
+    post:
+      tags:
+        - Notifications
+      summary: Mark a notification read
+      operationId: markNotificationRead
+      x-status: pending
+      x-ticket: LD-054
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      description: 'Roles: PROVIDER_ADMIN, IMPLEMENTATION_MANAGER, PROVIDER_CONTRIBUTOR, CUSTOMER_OWNER, CUSTOMER_MEMBER.'
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      security:
+        - sessionCookie: []
+          csrfToken: []
+  /v1/audit-logs:
+    get:
+      tags:
+        - Audit
+      summary: Read-only audit history
+      operationId: listAuditLogs
+      x-status: pending
+      x-ticket: LD-059
+      responses:
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Defined by the implementing ticket.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      description: 'Roles: PROVIDER_ADMIN.'
+      security:
+        - sessionCookie: []
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: sid
+      description: Opaque httpOnly session cookie set by /v1/auth/login.
+    csrfToken:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description:
+        Required on unsafe methods for authenticated requests; value from SessionResponse.csrfToken.
+        Origin must match APP_ORIGIN.
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 25
+  responses:
+    Unauthenticated:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            data: null
+            error:
+              code: UNAUTHENTICATED
+              message: Authentication required
+              requestId: 7b96ec33-e90e-47e6-a017-a79a3e983853
+    Forbidden:
+      description: You do not have permission to perform this action
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            data: null
+            error:
+              code: FORBIDDEN
+              message: You do not have permission to perform this action
+              requestId: 7b96ec33-e90e-47e6-a017-a79a3e983853
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            data: null
+            error:
+              code: NOT_FOUND
+              message: Resource not found
+              requestId: 7b96ec33-e90e-47e6-a017-a79a3e983853
+    Conflict:
+      description: Conflict with current state (duplicate or stale version)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            data: null
+            error:
+              code: CONFLICT
+              message: Conflict with current state (duplicate or stale version)
+              requestId: 7b96ec33-e90e-47e6-a017-a79a3e983853
+    ValidationFailed:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            data: null
+            error:
+              code: VALIDATION_FAILED
+              message: Request validation failed
+              requestId: 7b96ec33-e90e-47e6-a017-a79a3e983853
+    RateLimited:
+      description: Too many requests
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            data: null
+            error:
+              code: RATE_LIMITED
+              message: Too many requests
+              requestId: 7b96ec33-e90e-47e6-a017-a79a3e983853
+    ServiceUnavailable:
+      description: Service unavailable
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            data: null
+            error:
+              code: SERVICE_UNAVAILABLE
+              message: Service unavailable
+              requestId: 7b96ec33-e90e-47e6-a017-a79a3e983853
+    NotImplemented:
+      description: Not implemented yet (tracked as LD-xxx)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            data: null
+            error:
+              code: NOT_IMPLEMENTED
+              message: Not implemented yet (tracked as LD-xxx)
+              requestId: 7b96ec33-e90e-47e6-a017-a79a3e983853
+  schemas:
+    Envelope:
+      type: object
+      required:
+        - success
+        - data
+        - error
+      properties:
+        success:
+          type: boolean
+          const: true
+        data: {}
+        error:
+          type: 'null'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+    ErrorEnvelope:
+      type: object
+      required:
+        - success
+        - data
+        - error
+      properties:
+        success:
+          type: boolean
+          const: false
+        data:
+          type: 'null'
+        error:
+          $ref: '#/components/schemas/ApiError'
+    ApiError:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          enum:
+            - VALIDATION_FAILED
+            - UNAUTHENTICATED
+            - FORBIDDEN
+            - NOT_FOUND
+            - CONFLICT
+            - INVALID_STATE_TRANSITION
+            - RATE_LIMITED
+            - CSRF_FAILED
+            - NOT_IMPLEMENTED
+            - SERVICE_UNAVAILABLE
+            - INTERNAL_ERROR
+        message:
+          type: string
+        details: {}
+        requestId:
+          type: string
+    PageMeta:
+      type: object
+      required:
+        - total
+        - page
+        - limit
+      properties:
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+        version:
+          type: string
+    Role:
+      type: string
+      enum:
+        - PROVIDER_ADMIN
+        - IMPLEMENTATION_MANAGER
+        - PROVIDER_CONTRIBUTOR
+        - CUSTOMER_OWNER
+        - CUSTOMER_MEMBER
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          minLength: 1
+          maxLength: 256
+    SessionUser:
+      type: object
+      required:
+        - id
+        - organizationId
+        - organizationName
+        - email
+        - displayName
+        - role
+        - customerAccountId
+      properties:
+        id:
+          type: string
+          format: uuid
+        organizationId:
+          type: string
+          format: uuid
+        organizationName:
+          type: string
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        customerAccountId:
+          type:
+            - string
+            - 'null'
+          format: uuid
+          description: Set for customer-portal users only.
+    SessionResponse:
+      type: object
+      required:
+        - user
+        - csrfToken
+      properties:
+        user:
+          $ref: '#/components/schemas/SessionUser'
+        csrfToken:
+          type: string
+    CreateCustomerRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        industry:
+          type:
+            - string
+            - 'null'
+          maxLength: 100
+        websiteText:
+          type:
+            - string
+            - 'null'
+          maxLength: 300
+        primaryContact:
+          type:
+            - string
+            - 'null'
+          maxLength: 200
+    CustomerAccount:
+      type: object
+      required:
+        - id
+        - name
+        - status
+        - createdAt
+        - updatedAt
+        - version
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        industry:
+          type:
+            - string
+            - 'null'
+        websiteText:
+          type:
+            - string
+            - 'null'
+        primaryContact:
+          type:
+            - string
+            - 'null'
+        status:
+          type: string
+          enum:
+            - ACTIVE
+            - ARCHIVED
+        archivedAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          minimum: 1
